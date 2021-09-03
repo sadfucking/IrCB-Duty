@@ -4,7 +4,7 @@ import requests
 from html import escape
 
 from idm.objects import MySignalEvent, dp
-from .template import delete_template, get_template_list
+from .template import delete_template
 
 
 @dp.longpoll_event_register('+гс')
@@ -49,22 +49,40 @@ def voice_create(event: MySignalEvent) -> str:
     })
     event.db.save()
 
-    event.msg_op(2, f'✅ Голосовое сообщение "{name}" ' +
-                 ('перезаписано' if exist else 'сохранено') +
+    event.msg_op(2, f'{name}' +
+                 ('+' if exist else '+') +
                  f'\nДлительность - {attach["duration"]} сек.')
+    event.msg_op(3)
     return "ok"
 
 
 @dp.longpoll_event_register('гсы')
 @dp.my_signal_event_register('гсы')
 def template_list(event: MySignalEvent) -> str:
-    message = get_template_list(event, event.db.voices)
-    event.msg_op(2, message.format(
-        name_genitive='голосовых сообщений',
-        name_accusative='голосовые сообщения',
-        name_accusative_cap='Голосовые сообщения',
-        no_templates='👀 Нет ни одного голосового сообщения... Для создания используй команду "+гс"'
-    ))
+    category = ' '.join(event.args)
+    voices = event.db.voices
+    if category == 'все':
+        message = '📃 Список всех голосовых сообщений:'
+        for i, v in enumerate(voices, 1):
+            message += f"\n{i}. {v['name']} | {v['cat']}"
+    elif not category:
+        cats = {}
+        for v in voices:
+            cats[v['cat']] = cats.get(v['cat'], 0) + 1
+        message = "📚 Категории голосовых сообщений:"
+        for cat in cats:
+            message += f"\n-- {cat} ({cats[cat]})"
+    else:
+        message = f'📖 Голосовые сообщения категории "{category}":'
+        for v in voices:
+            if v['cat'] == category:
+                message += f"\n-- {v['name']}"
+    if '\n' not in message:
+        if voices == []:
+            message = '👀 Нет ни одного голосового сообщения... Для создания используй команду "+гс"'  # noqa
+        else:
+            message = '⚠️ Голосовые сообщения по указанному запросу не найдены'
+    event.msg_op(2, message)
     return "ok"
 
 
@@ -74,7 +92,7 @@ def voice_delete(event: MySignalEvent) -> str:
     name = ' '.join(event.args).lower()
     event.db.voices, exist = delete_template(name, event.db.voices)
     if exist:
-        msg = f'✅ Голосовое сообщение "{name}" удалено'
+        msg = f'{name}'
         event.db.save()
     else:
         msg = f'⚠️ Голосовое сообщение "{name}" не найдено'
@@ -92,6 +110,7 @@ def voice_send(event: MySignalEvent) -> str:
             voice = v
             break
     if voice:
+        event.msg_op(2, 'красный крестик')
         reply = str(event.reply_message['id']) if event.reply_message else ''
         att = voice['attachments']
         event.api.exe(
@@ -104,5 +123,6 @@ def voice_send(event: MySignalEvent) -> str:
                 '"reply_to":"%s",' % reply +
                 '"random_id":0});')
     else:
-        event.msg_op(2, f'❗ Голосовое сообщение "{name}" не найдено')
+        event.msg_op(2, f'нету')
+        event.msg_op(3)
     return "ok"
