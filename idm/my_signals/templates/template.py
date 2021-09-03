@@ -13,66 +13,6 @@ def delete_template(name: str, templates: list) -> Tuple[list, bool]:
     return templates, False
 
 
-def get_template_list(event: MySignalEvent, templates: list):
-    if len(event.args) > 1:
-        if event.args[-1].isdigit() or (event.args[-1].startswith('-') and event.args[-1][1:].isdigit()):
-            page = int(event.args.pop(-1))
-            if page > 0:
-                page -= 1
-    else:
-        page = 0
-    category = ' '.join(event.args).lower()
-    template_list = None
-    if not category:
-        cats = {}
-        for t in templates:
-            cats[t['cat']] = cats.get(t['cat'], 0) + 1
-        message = "📚 Категории {name_genitive}:"
-        for cat in cats:
-            message += f"\n-- {cat} ({cats[cat]})"
-    else:
-        if category == 'все':
-            message = '📃 Список всех {name_genitive}:'
-            category = None
-        else:
-            message = f'📖 {{name_accusative_cap}} категории "{category}":'
-        message += list_by_page(templates, page, category)
-    if '\n' not in message:
-        if templates == []:
-            message = '{no_templates}'
-        else:
-            message = '⚠️ {name_accusative_cap} по указанному запросу не найдены'
-    return message
-
-
-def list_by_page(templates, page, category) -> str:
-    if len(templates) > 40:
-        if page >= 0:
-            message = f'(страница #{page+1})'
-        else:
-            message = f'(страница #{abs(page)} с конца)'
-    else:
-        message = ''
-    shift = page*40
-    sliced_list = templates[shift:shift+40] if shift >= 0 else templates[shift-1:shift+39]
-    if page < 0:
-        try:
-            sliced_list.append(templates[shift+39])
-        except IndexError:
-            pass
-    offset = (shift+1) if shift >= 0 else (len(templates)+shift)
-    for i, t in enumerate(sliced_list, offset):
-        if category:
-            if t['cat'] != category:
-                continue
-            message += f'\n-- {t["name"]}'
-        else:
-            message += f'\n{i}. {t["name"]} | {t["cat"]}'
-    if '\n' not in message:
-        return ''
-    return '\n' + message
-
-
 @dp.longpoll_event_register('+шаб')
 @dp.my_signal_event_register('+шаб')
 def template_create(event: MySignalEvent) -> str:
@@ -110,21 +50,38 @@ def template_create(event: MySignalEvent) -> str:
     })
     event.db.save()
 
-    event.msg_op(2, f'✅ Шаблон "{name}" ' +
-                 ("перезаписан" if exist else "сохранен"), delete=2)
+    event.msg_op(2, attachment = 'photo-196431814_457239926')
+    event.msg_op(3)
     return "ok"
 
 
 @dp.longpoll_event_register('шабы')
 @dp.my_signal_event_register('шабы')
 def template_list(event: MySignalEvent) -> str:
-    message = get_template_list(event, event.db.templates)
-    event.msg_op(2, message.format(
-        name_genitive='шаблонов',
-        name_accusative='шаблоны',
-        name_accusative_cap='Шаблоны',
-        no_templates='👀 Нет ни одного шаблона... Для создания используй команду "+шаб"'
-    ))
+    category = ' '.join(event.args).lower()
+    templates = event.db.templates
+    if category == 'все':
+        message = '📃 Список всех шаблонов:'
+        for i, t in enumerate(templates, 1):
+            message += f"\n{i}. {t['name']} | {t['cat']}"
+    elif not category:
+        cats = {}
+        for t in templates:
+            cats[t['cat']] = cats.get(t['cat'], 0) + 1
+        message = "📚 Категории шаблонов:"
+        for cat in cats:
+            message += f"\n-- {cat} ({cats[cat]})"
+    else:
+        message = f'📖 Шаблоны категории "{category}":'
+        for t in templates:
+            if t['cat'] == category:
+                message += f"\n-- {t['name']}"
+    if '\n' not in message:
+        if templates == []:
+            message = '👀 Нет ни одного шаблона... Для создания используй команду "+шаб"'  # noqa
+        else:
+            message = '⚠️ Шаблоны по указанному запросу не найдены'
+    event.msg_op(2, message)
     return "ok"
 
 
@@ -138,11 +95,14 @@ def get_name(event: MySignalEvent) -> Union[str]:
 def template_delete(event: MySignalEvent, name: str) -> str:
     event.db.templates, exist = delete_template(name, event.db.templates)
     if exist:
-        msg = f'✅ Шаблон "{name}" удален'
+        msg = f'-'
+        event.msg_op(2, attachment = 'photo-196431814_457239926')
+        event.msg_op(3)
         event.db.save()
     else:
-        msg = f'⚠️ Шаблон "{name}" не найден'
+        msg = f'нету'
     event.msg_op(2, msg, delete=1)
+    event.msg_op(3)
     return "ok"
 
 
@@ -161,5 +121,6 @@ def template_show(event: MySignalEvent, name: str) -> str:
         event.msg_op(2, temp['payload'] + '\n' + event.payload,
                      keep_forward_messages=1, attachment=','.join(atts))
     else:
-        event.msg_op(2, f'❗ Шаблон "{name}" не найден')
+        event.msg_op(2, f'нету')
+        event.msg_op(3)
     return "ok"
