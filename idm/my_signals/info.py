@@ -9,9 +9,10 @@ def info(event: MySignalEvent) -> str:
     update_info = ''
     last_v, changes = get_last_version()
     if last_v != __version__:
-        update_info = 'Доступно обновление! Новая версия: ' + last_v + '\n'
+        update_info = '+' + last_v + """
+"""
         if changes != '':
-            update_info += 'Что нового:\n' + changes + '\n\n'
+            update_info += ''
     owner = event.api('users.get', user_ids=event.db.duty_id)[0]
     message = event.responses['info_myself'].format(
         чаты=len(event.db.chats.keys()),
